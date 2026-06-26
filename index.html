@@ -282,7 +282,7 @@ function setStatus(msg, isErr=false) {
 }
 
 function fmt(v) {
-  return (v === null || v === undefined || Number.isNaN(v)) ? "–" : Number(v).toFixed(3);
+  return (v === null || v === undefined || Number.isNaN(v)) ? "–" : Number(v).toFixed(2);
 }
 
 function computeStats(points) {

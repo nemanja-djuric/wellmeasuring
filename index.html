@@ -124,7 +124,7 @@
   <span class="ico">⚠️</span><span id="signal-text"></span>
 </div>
 
-<div class="cards">
+<div class="charts">
   <div class="card">
     <h2><span class="wico" data-well="old" style="color:var(--c1)"></span> Stari Bunar</h2>
     <div class="stats">
@@ -133,6 +133,11 @@
       <div class="stat"><div class="label">Poslednje</div><div class="val" id="s1-last">–</div><div class="when" id="s1-last-t"></div></div>
     </div>
   </div>
+  <div class="chart-wrap">
+    <h3><span class="wico" data-well="old" style="color:var(--c1)"></span> Stari Bunar<span class="gran" id="gran1"></span></h3>
+    <div class="chart-box"><canvas id="chart1"></canvas></div>
+  </div>
+
   <div class="card">
     <h2><span class="wico" data-well="new" style="color:var(--c2)"></span> Novi Bunar</h2>
     <div class="stats">
@@ -140,13 +145,6 @@
       <div class="stat"><div class="label">Maks</div><div class="val" id="s2-max">–</div><div class="when" id="s2-max-t"></div></div>
       <div class="stat"><div class="label">Poslednje</div><div class="val" id="s2-last">–</div><div class="when" id="s2-last-t"></div></div>
     </div>
-  </div>
-</div>
-
-<div class="charts">
-  <div class="chart-wrap">
-    <h3><span class="wico" data-well="old" style="color:var(--c1)"></span> Stari Bunar<span class="gran" id="gran1"></span></h3>
-    <div class="chart-box"><canvas id="chart1"></canvas></div>
   </div>
   <div class="chart-wrap">
     <h3><span class="wico" data-well="new" style="color:var(--c2)"></span> Novi Bunar<span class="gran" id="gran2"></span></h3>
@@ -162,10 +160,16 @@ const CHANNEL_ID = "3030085";
 const READ_API_KEY = "GCO9R4MUA2YCOHCY";
 
 // range -> ThingSpeak query params (averaging keeps point counts sane)
+// NOTE: ThingSpeak applies `average` only over the last ~8000 RAW records of the
+// requested window. A device posting ~once/min produces ~8000 records in ~5.3 days,
+// so a `days=7` averaged query silently drops the oldest ~1.7 days — which shows up
+// as an empty gap on the left of the 7d chart (the 30d view escapes this because
+// daily averaging is served from a full-window path). `maxChunkMs` splits such a
+// window into sub-requests that each stay under the cap; results are merged below.
 const RANGES = {
   "1h":  { minutes: 60,  average: null, gran: "1 min",  ms: 60*60*1000,        unit: "minute" },
   "1d":  { days: 1,      average: 60,   gran: "1 sat",   ms: 24*60*60*1000,     unit: "hour"   },
-  "7d":  { days: 7,      average: 240,  gran: "4 sata",  ms: 7*24*60*60*1000,   unit: "day"    },
+  "7d":  { days: 7,      average: 240,  gran: "4 sata",  ms: 7*24*60*60*1000,   unit: "day", maxChunkMs: 4*24*60*60*1000 },
   "30d": { days: 30,     average: 1440, gran: "1 dan",   ms: 30*24*60*60*1000,  unit: "day"    },
 };
 
@@ -177,14 +181,54 @@ let chart1, chart2;
 let currentRange = "1d";
 let refreshTimer;
 
-function buildUrl(range) {
+function tsParam(ms) {
+  return DT.fromMillis(ms, { zone: "utc" }).toFormat("yyyy-MM-dd HH:mm:ss");
+}
+
+function buildUrl(range, startMs, endMs) {
   const cfg = RANGES[range];
   const p = new URLSearchParams({ api_key: READ_API_KEY });
-  if (cfg.minutes) p.set("minutes", cfg.minutes);
-  if (cfg.days) p.set("days", cfg.days);
+  if (startMs != null && endMs != null) {
+    // Explicit window: lets ThingSpeak average over exactly this slice.
+    p.set("start", tsParam(startMs));
+    p.set("end", tsParam(endMs));
+  } else {
+    if (cfg.minutes) p.set("minutes", cfg.minutes);
+    if (cfg.days) p.set("days", cfg.days);
+  }
   if (cfg.average) p.set("average", cfg.average);
   p.set("timezone", "UTC"); // we convert to local on the client
   return `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?${p.toString()}`;
+}
+
+async function fetchJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// Fetch a range's feeds, chunking long averaged windows so each sub-request stays
+// under ThingSpeak's ~8000 raw-record averaging cap (see RANGES note above).
+async function fetchFeeds(range) {
+  const cfg = RANGES[range];
+  if (cfg.average && cfg.maxChunkMs && cfg.ms > cfg.maxChunkMs) {
+    const endMs = DT.now().toMillis();
+    const startMs = endMs - cfg.ms;
+    const urls = [];
+    for (let s = startMs; s < endMs; s += cfg.maxChunkMs) {
+      urls.push(buildUrl(range, s, Math.min(s + cfg.maxChunkMs, endMs)));
+    }
+    const chunks = await Promise.all(urls.map(u => fetchJson(u).then(d => d.feeds || [])));
+    // Merge and de-duplicate by timestamp (chunk boundaries share a bucket).
+    const byTime = new Map();
+    for (const feeds of chunks) {
+      for (const f of feeds) byTime.set(f.created_at, f);
+    }
+    return [...byTime.values()].sort((a, b) =>
+      a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
+  }
+  const data = await fetchJson(buildUrl(range));
+  return data.feeds || [];
 }
 
 function setStatus(msg, isErr=false) {
@@ -306,10 +350,7 @@ function makeCharts() {
 async function load(range) {
   setStatus("Učitavanje…");
   try {
-    const res = await fetch(buildUrl(range));
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const feeds = data.feeds || [];
+    const feeds = await fetchFeeds(range);
 
     const s1 = [], s2 = [];
     for (const f of feeds) {
@@ -349,7 +390,7 @@ function selectRange(range) {
   currentRange = range;
   document.querySelectorAll("#ranges button").forEach(b =>
     b.classList.toggle("active", b.dataset.range === range));
-  const granText = `granularnost: ${RANGES[range].gran}`;
+  const granText = RANGES[range].gran;
   document.getElementById("gran1").textContent = granText;
   document.getElementById("gran2").textContent = granText;
   load(range);

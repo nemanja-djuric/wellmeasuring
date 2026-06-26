@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Praćenje bunara — ThingSpeak</title>
+
+<!-- Chart.js + date adapter (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+
+<style>
+  :root, body.dark {
+    --bg: #0f172a;
+    --bg-2: #1e293b;
+    --panel: #1e293b;
+    --panel-2: #273449;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --c1: #38bdf8; /* Stari Bunar */
+    --c2: #f472b6; /* Novi Bunar */
+    --accent: #6366f1;
+  }
+  body.light {
+    --bg: #f1f5f9;
+    --bg-2: #ffffff;
+    --panel: #ffffff;
+    --panel-2: #f1f5f9;
+    --border: #d8dee9;
+    --text: #1e293b;
+    --muted: #64748b;
+    --c1: #0284c7; /* Stari Bunar */
+    --c2: #db2777; /* Novi Bunar */
+    --accent: #6366f1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(1200px 600px at 20% -10%, var(--bg-2) 0%, var(--bg) 60%);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px;
+    transition: background .25s, color .25s;
+  }
+  header { max-width: 1100px; margin: 0 auto 20px; }
+  h1 { font-size: 22px; margin: 0 0 4px; font-weight: 650; }
+  .sub { color: var(--muted); font-size: 13px; }
+
+  .controls {
+    max-width: 1100px; margin: 0 auto 18px;
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  }
+  .seg { display: inline-flex; background: var(--panel); border-radius: 10px; padding: 4px; gap: 4px; }
+  .seg button {
+    border: 0; background: transparent; color: var(--muted);
+    padding: 8px 16px; border-radius: 7px; cursor: pointer;
+    font-size: 14px; font-weight: 600; transition: .15s;
+  }
+  .seg button:hover { color: var(--text); }
+  .seg button.active { background: var(--accent); color: #fff; }
+  .toggle {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    padding: 8px 14px; border-radius: 10px; cursor: pointer; font-size: 14px;
+    font-weight: 600; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .toggle:hover { border-color: var(--accent); }
+  .status { margin-left: auto; color: var(--muted); font-size: 13px; }
+  .status.err { color: #ef4444; }
+
+  .banner { max-width: 1100px; margin: 0 auto 18px; padding: 12px 16px; border-radius: 12px;
+            background: #7f1d1d; color: #fee2e2; border: 1px solid #ef4444;
+            font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .banner .ico { font-size: 18px; }
+  .banner[hidden] { display: none; }
+
+  .cards { max-width: 1100px; margin: 0 auto 18px; display: grid; gap: 14px;
+           grid-template-columns: repeat(2, 1fr); }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
+  .card h2 { margin: 0 0 12px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat { background: var(--panel-2); border-radius: 10px; padding: 10px 12px; }
+  .stat .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .val { font-size: 20px; font-weight: 700; margin-top: 2px; }
+  .stat .when { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .charts { max-width: 1100px; margin: 0 auto; display: grid; gap: 16px; }
+  .chart-wrap { background: var(--panel);
+                border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px 8px; }
+  .chart-wrap h3 { margin: 0 0 6px; font-size: 14px; display: flex; align-items: center; gap: 8px; color: var(--text); }
+  .chart-wrap h3 .gran { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted);
+                         background: var(--panel-2); border: 1px solid var(--border);
+                         padding: 3px 9px; border-radius: 999px; }
+  .chart-box { position: relative; height: 300px; }
+  footer { max-width: 1100px; margin: 16px auto 0; color: var(--muted); font-size: 12px; text-align: center; }
+  @media (max-width: 680px) { .cards { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Praćenje bunara</h1>
+  <div class="sub">ThingSpeak kanal 3030085 · Stari Bunar &amp; Novi Bunar</div>
+</header>
+
+<div class="controls">
+  <div class="seg" id="ranges">
+    <button data-range="1h">1č</button>
+    <button data-range="1d" class="active">1d</button>
+    <button data-range="7d">7d</button>
+    <button data-range="30d">30d</button>
+  </div>
+  <button class="toggle" id="theme-toggle" title="Promeni temu">🌙 Tamna</button>
+  <span class="status" id="status">Učitavanje…</span>
+</div>
+
+<div class="banner" id="signal-banner" hidden>
+  <span class="ico">⚠️</span><span id="signal-text"></span>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <h2><span class="dot" style="background:var(--c1)"></span> Stari Bunar</h2>
+    <div class="stats">
+      <div class="stat"><div class="label">Min</div><div class="val" id="s1-min">–</div><div class="when" id="s1-min-t"></div></div>
+      <div class="stat"><div class="label">Maks</div><div class="val" id="s1-max">–</div><div class="when" id="s1-max-t"></div></div>
+      <div class="stat"><div class="label">Poslednje</div><div class="val" id="s1-last">–</div><div class="when" id="s1-last-t"></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2><span class="dot" style="background:var(--c2)"></span> Novi Bunar</h2>
+    <div class="stats">
+      <div class="stat"><div class="label">Min</div><div class="val" id="s2-min">–</div><div class="when" id="s2-min-t"></div></div>
+      <div class="stat"><div class="label">Maks</div><div class="val" id="s2-max">–</div><div class="when" id="s2-max-t"></div></div>
+      <div class="stat"><div class="label">Poslednje</div><div class="val" id="s2-last">–</div><div class="when" id="s2-last-t"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="charts">
+  <div class="chart-wrap">
+    <h3><span class="dot" style="background:var(--c1)"></span> Stari Bunar<span class="gran" id="gran1"></span></h3>
+    <div class="chart-box"><canvas id="chart1"></canvas></div>
+  </div>
+  <div class="chart-wrap">
+    <h3><span class="dot" style="background:var(--c2)"></span> Novi Bunar<span class="gran" id="gran2"></span></h3>
+    <div class="chart-box"><canvas id="chart2"></canvas></div>
+  </div>
+</div>
+
+<footer>Automatsko osvežavanje na 60s · vreme prikazano u vašoj lokalnoj vremenskoj zoni</footer>
+
+<script>
+// ---- Local-usage credentials (private channel) ----
+const CHANNEL_ID = "3030085";
+const READ_API_KEY = "GCO9R4MUA2YCOHCY";
+
+// range -> ThingSpeak query params (averaging keeps point counts sane)
+const RANGES = {
+  "1h":  { minutes: 60,  average: null, gran: "1 min",  ms: 60*60*1000          },
+  "1d":  { days: 1,      average: 60,   gran: "1 sat",   ms: 24*60*60*1000       },
+  "7d":  { days: 7,      average: 240,  gran: "4 sata",  ms: 7*24*60*60*1000     },
+  "30d": { days: 30,     average: 1440, gran: "1 dan",   ms: 30*24*60*60*1000    },
+};
+
+const DT = luxon.DateTime;
+const LOCALE = "sr-Latn";
+const UNIT = "m"; // Y-axis unit (meters)
+const SIGNAL_TIMEOUT_MS = 90 * 1000; // no signal if last entry older than this
+let chart1, chart2;
+let currentRange = "1d";
+let refreshTimer;
+
+function buildUrl(range) {
+  const cfg = RANGES[range];
+  const p = new URLSearchParams({ api_key: READ_API_KEY });
+  if (cfg.minutes) p.set("minutes", cfg.minutes);
+  if (cfg.days) p.set("days", cfg.days);
+  if (cfg.average) p.set("average", cfg.average);
+  p.set("timezone", "UTC"); // we convert to local on the client
+  return `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?${p.toString()}`;
+}
+
+function setStatus(msg, isErr=false) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.classList.toggle("err", isErr);
+}
+
+function fmt(v) {
+  return (v === null || v === undefined || Number.isNaN(v)) ? "–" : Number(v).toFixed(3);
+}
+
+function computeStats(points) {
+  const valid = points.filter(p => p.y !== null && !Number.isNaN(p.y));
+  if (!valid.length) return null;
+  let min = valid[0], max = valid[0];
+  for (const p of valid) {
+    if (p.y < min.y) min = p;
+    if (p.y > max.y) max = p;
+  }
+  return { min, max, last: valid[valid.length - 1] };
+}
+
+function whenStr(p) {
+  return p ? DT.fromMillis(p.x).toLocal().setLocale(LOCALE).toFormat("d. LLL, HH:mm") : "";
+}
+
+function updateCard(prefix, stats) {
+  const ids = ["min", "max", "last"];
+  if (!stats) {
+    ids.forEach(k => {
+      document.getElementById(`${prefix}-${k}`).textContent = "–";
+      document.getElementById(`${prefix}-${k}-t`).textContent = "";
+    });
+    return;
+  }
+  document.getElementById(`${prefix}-min`).textContent = fmt(stats.min.y);
+  document.getElementById(`${prefix}-max`).textContent = fmt(stats.max.y);
+  document.getElementById(`${prefix}-last`).textContent = fmt(stats.last.y);
+  document.getElementById(`${prefix}-min-t`).textContent = whenStr(stats.min);
+  document.getElementById(`${prefix}-max-t`).textContent = whenStr(stats.max);
+  document.getElementById(`${prefix}-last-t`).textContent = whenStr(stats.last);
+}
+
+function themeColors() {
+  const light = document.body.classList.contains("light");
+  return {
+    text: light ? "#1e293b" : "#e2e8f0",
+    muted: light ? "#64748b" : "#94a3b8",
+    grid: light ? "rgba(100,116,139,.15)" : "rgba(148,163,184,.1)",
+    tipBg: light ? "#ffffff" : "#0f172a",
+    tipBorder: light ? "#d8dee9" : "#334155",
+  };
+}
+
+function makeChart(canvasId, label, color, bg, yMin, yMax) {
+  const c = themeColors();
+  const ctx = document.getElementById(canvasId).getContext("2d");
+  return new Chart(ctx, {
+    type: "line",
+    data: {
+      datasets: [
+        { label, data: [], borderColor: color,
+          backgroundColor: bg, borderWidth: 2, pointRadius: 0,
+          tension: .25, fill: true, spanGaps: true },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: c.tipBg, borderColor: c.tipBorder, borderWidth: 1,
+          titleColor: c.text, bodyColor: c.text, padding: 10,
+          callbacks: {
+            title: (items) => DT.fromMillis(items[0].parsed.x).toLocal().setLocale(LOCALE).toFormat("d. LLL yyyy. HH:mm"),
+            label: (item) => `${item.dataset.label}: ${fmt(item.parsed.y)} ${UNIT}`
+          }
+        }
+      },
+      scales: {
+        x: { type: "time",
+             time: { tooltipFormat: "HH:mm",
+                     displayFormats: { minute: "d. LLL HH:mm", hour: "d. LLL HH:mm", day: "d. LLL", week: "d. LLL", month: "LLL yy" } },
+             adapters: { date: { locale: LOCALE } },
+             ticks: { color: c.muted, maxRotation: 50, minRotation: 50, autoSkip: true, autoSkipPadding: 12 },
+             grid: { color: c.grid } },
+        y: { min: yMin, max: yMax,
+             title: { display: true, text: `Nivo (${UNIT})`, color: c.muted },
+             ticks: { color: c.muted, callback: (v) => `${Number(v).toFixed(2)} ${UNIT}` },
+             grid: { color: c.grid } }
+      }
+    }
+  });
+}
+
+function applyThemeToCharts() {
+  const c = themeColors();
+  for (const ch of [chart1, chart2]) {
+    if (!ch) continue;
+    ch.options.plugins.tooltip.backgroundColor = c.tipBg;
+    ch.options.plugins.tooltip.borderColor = c.tipBorder;
+    ch.options.plugins.tooltip.titleColor = c.text;
+    ch.options.plugins.tooltip.bodyColor = c.text;
+    ch.options.scales.x.ticks.color = c.muted;
+    ch.options.scales.x.grid.color = c.grid;
+    ch.options.scales.y.ticks.color = c.muted;
+    ch.options.scales.y.grid.color = c.grid;
+    ch.update("none");
+  }
+}
+
+function makeCharts() {
+  chart1 = makeChart("chart1", "Stari Bunar", "#38bdf8", "rgba(56,189,248,.12)", 0, 4);
+  chart2 = makeChart("chart2", "Novi Bunar", "#f472b6", "rgba(244,114,182,.10)", 0, 12);
+}
+
+async function load(range) {
+  setStatus("Učitavanje…");
+  try {
+    const res = await fetch(buildUrl(range));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const feeds = data.feeds || [];
+
+    const s1 = [], s2 = [];
+    for (const f of feeds) {
+      const t = DT.fromISO(f.created_at, { zone: "utc" }).toMillis();
+      const v1 = f.field1 == null || f.field1 === "" ? null : parseFloat(f.field1);
+      const v2 = f.field2 == null || f.field2 === "" ? null : parseFloat(f.field2);
+      s1.push({ x: t, y: v1 });
+      s2.push({ x: t, y: v2 });
+    }
+
+    chart1.data.datasets[0].data = s1;
+    chart2.data.datasets[0].data = s2;
+
+    // Pin the x-axis to the full selected window (data may start later due to gaps)
+    const xMax = DT.now().toMillis();
+    const xMin = xMax - RANGES[range].ms;
+    for (const ch of [chart1, chart2]) {
+      ch.options.scales.x.min = xMin;
+      ch.options.scales.x.max = xMax;
+    }
+
+    chart1.update();
+    chart2.update();
+
+    updateCard("s1", computeStats(s1));
+    updateCard("s2", computeStats(s2));
+
+    setStatus(`${feeds.length} tačaka · ažurirano ${DT.now().toFormat("HH:mm:ss")}`);
+  } catch (e) {
+    setStatus(`Greška: ${e.message}`, true);
+  }
+  checkSignal();
+}
+
+function selectRange(range) {
+  currentRange = range;
+  document.querySelectorAll("#ranges button").forEach(b =>
+    b.classList.toggle("active", b.dataset.range === range));
+  const granText = `granularnost: ${RANGES[range].gran}`;
+  document.getElementById("gran1").textContent = granText;
+  document.getElementById("gran2").textContent = granText;
+  load(range);
+}
+
+// ---- Signal / connectivity check (uses the channel's true last entry) ----
+function ageStr(ms) {
+  const min = Math.round(ms / 60000);
+  if (min < 60) return `pre ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `pre ${h} h`;
+  const d = Math.floor(h / 24);
+  return `pre ${d} ${d === 1 ? "dan" : "dana"}`;
+}
+
+function showBanner(text) {
+  document.getElementById("signal-text").textContent = text;
+  document.getElementById("signal-banner").hidden = false;
+}
+function hideBanner() {
+  document.getElementById("signal-banner").hidden = true;
+}
+
+async function checkSignal() {
+  try {
+    const url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds/last.json?api_key=${READ_API_KEY}&timezone=UTC`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const txt = (await res.text()).trim();
+    if (!txt || txt === "-1") { showBanner("Nema signala sa ThingSpeak-a — nema zabeleženih podataka."); return; }
+    const last = JSON.parse(txt);
+    if (!last || !last.created_at) { showBanner("Nema signala sa ThingSpeak-a — nema zabeleženih podataka."); return; }
+    const ts = DT.fromISO(last.created_at, { zone: "utc" }).toMillis();
+    const age = Date.now() - ts;
+    if (age > SIGNAL_TIMEOUT_MS) {
+      const when = DT.fromMillis(ts).toLocal().setLocale(LOCALE).toFormat("d. LLL yyyy. HH:mm");
+      showBanner(`Nema signala sa ThingSpeak-a — poslednji zapis: ${when} (${ageStr(age)}).`);
+    } else {
+      hideBanner();
+    }
+  } catch (e) {
+    showBanner(`Nema veze sa ThingSpeak-om (${e.message}).`);
+  }
+}
+
+// ---- Theme toggle (persisted) ----
+function setTheme(theme) {
+  document.body.classList.remove("light", "dark");
+  document.body.classList.add(theme);
+  document.getElementById("theme-toggle").textContent =
+    theme === "light" ? "☀️ Svetla" : "🌙 Tamna";
+  localStorage.setItem("theme", theme);
+  applyThemeToCharts();
+}
+
+document.getElementById("theme-toggle").addEventListener("click", () => {
+  setTheme(document.body.classList.contains("light") ? "dark" : "light");
+});
+
+document.getElementById("ranges").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (btn) selectRange(btn.dataset.range);
+});
+
+setTheme(localStorage.getItem("theme") || "dark");
+makeCharts();
+selectRange("1d");
+refreshTimer = setInterval(() => load(currentRange), 60000);
+</script>
+</body>
+</html>

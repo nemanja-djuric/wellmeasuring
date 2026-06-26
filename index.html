@@ -50,6 +50,13 @@
   .seg button:hover { color: var(--text); }
   .seg button.active { background: var(--accent); color: #fff; }
   .status { margin-left: auto; color: var(--muted); font-size: 13px; }
+  .btn-export {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    padding: 8px 14px; border-radius: 10px; cursor: pointer; font-size: 13px;
+    font-weight: 600; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-export:hover { border-color: var(--accent); }
+  .btn-export:disabled { opacity: .55; cursor: progress; }
   .status.err { color: #ef4444; }
 
   .banner { max-width: 1100px; margin: 0 auto 18px; padding: 12px 16px; border-radius: 12px;
@@ -77,6 +84,7 @@
                 border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px 8px; }
   .chart-wrap h3 { margin: 0 0 6px; font-size: 14px; display: flex; align-items: center; gap: 8px; color: var(--text); }
   .chart-box { position: relative; height: 230px; }
+  .card .chart-box { margin-top: 14px; }
   footer { max-width: 1100px; margin: 16px auto 0; color: var(--muted); font-size: 12px; text-align: center; }
   @media (max-width: 680px) { .cards { grid-template-columns: 1fr; } }
 
@@ -144,6 +152,7 @@
       <button data-range="7d">7d</button>
       <button data-range="30d">30d</button>
     </div>
+    <button class="btn-export" id="export-csv" title="Izvezi sve podatke u CSV">⤓ Izvoz u Excel</button>
     <span class="status" id="status">Učitavanje…</span>
   </div>
 
@@ -159,9 +168,6 @@
         <div class="stat"><div class="label">Maks</div><div class="val" id="s1-max">–</div><div class="when" id="s1-max-t"></div></div>
         <div class="stat"><div class="label">Trenutno</div><div class="val" id="s1-last">–</div><div class="when" id="s1-last-t"></div></div>
       </div>
-    </div>
-    <div class="chart-wrap">
-      <h3><span class="wico" data-well="old" style="color:var(--c1)"></span> Stari Bunar</h3>
       <div class="chart-box"><canvas id="chart1"></canvas></div>
     </div>
 
@@ -172,9 +178,6 @@
         <div class="stat"><div class="label">Maks</div><div class="val" id="s2-max">–</div><div class="when" id="s2-max-t"></div></div>
         <div class="stat"><div class="label">Trenutno</div><div class="val" id="s2-last">–</div><div class="when" id="s2-last-t"></div></div>
       </div>
-    </div>
-    <div class="chart-wrap">
-      <h3><span class="wico" data-well="new" style="color:var(--c2)"></span> Novi Bunar</h3>
       <div class="chart-box"><canvas id="chart2"></canvas></div>
     </div>
   </div>
@@ -447,6 +450,64 @@ document.getElementById("ranges").addEventListener("click", (e) => {
   if (btn) selectRange(btn.dataset.range);
 });
 
+// ---- Export ALL channel data to CSV (paginates past ThingSpeak's 8000-row cap) ----
+function csvCell(v) {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+async function exportCsv() {
+  const btn = document.getElementById("export-csv");
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "⤓ Preuzimanje…";
+  try {
+    const PAGE = 8000;
+    const byId = new Map();
+    let end = null;
+    for (let i = 0; i < 200; i++) {
+      const p = new URLSearchParams({ api_key: READ_API_KEY, results: PAGE, timezone: "UTC" });
+      if (end) p.set("end", end);
+      const data = await fetchJson(`https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?${p.toString()}`);
+      const feeds = data.feeds || [];
+      if (!feeds.length) break;
+      for (const f of feeds) byId.set(f.entry_id, f);
+      if (feeds.length < PAGE) break;
+      // Page backwards: next window ends just before the earliest record we just got.
+      const earliest = feeds[0].created_at;
+      const nextEnd = DT.fromISO(earliest, { zone: "utc" }).minus({ seconds: 1 }).toFormat("yyyy-MM-dd HH:mm:ss");
+      if (nextEnd === end) break;
+      end = nextEnd;
+    }
+    const all = [...byId.values()].sort((a, b) =>
+      a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
+    const header = ["created_at", "entry_id", "stari_bunar", "novi_bunar"];
+    const lines = [header.join(",")];
+    for (const f of all) {
+      lines.push([csvCell(f.created_at), csvCell(f.entry_id), csvCell(f.field1), csvCell(f.field2)].join(","));
+    }
+    const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `bunari_${DT.now().toFormat("yyyyLLdd_HHmm")}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    btn.textContent = `⤓ ${all.length} redova`;
+    setTimeout(() => { btn.textContent = original; }, 2500);
+  } catch (e) {
+    btn.textContent = "⤓ Greška";
+    setTimeout(() => { btn.textContent = original; }, 2500);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById("export-csv").addEventListener("click", exportCsv);
+
 // ---- Tabs (Osnovno / Napredno) ----
 let currentTab = "basic";
 let advancedInited = false;
@@ -513,12 +574,16 @@ const WELL_ICONS = {
     <path d="M6.5 13.5 L5.5 20.5 H18.5 L17.5 13.5 Z"/>
     <path d="M9 17.2 H15"/>
   </svg>`,
-  // Novi Bunar — modern gooseneck tap with a water drop
+  // Novi Bunar — modern cast-iron hand pump
   new: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M5 20.5 H13"/>
-    <path d="M7 20.5 V8"/>
-    <path d="M7 8 a5 5 0 0 1 10 0 v1.5"/>
-    <path d="M17 9.8 c-1.1 1.5 -1.7 2.6 -1.7 3.4 a1.7 1.7 0 0 0 3.4 0 C18.7 12.4 18.1 11.3 17 9.8 Z"/>
+    <path d="M4 20.5 H14"/>
+    <path d="M8 20.5 V8.5"/>
+    <path d="M11 20.5 V8.5"/>
+    <path d="M7.5 8.5 H11.5"/>
+    <path d="M9.5 8.5 V6.5 H17"/>
+    <path d="M11 12 H15 V14"/>
+    <path d="M15 16.2 v1.3"/>
+    <path d="M15 18.9 v1.3"/>
   </svg>`
 };
 

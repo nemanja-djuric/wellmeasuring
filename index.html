@@ -253,6 +253,31 @@ async function fetchFeeds(range) {
   return data.feeds || [];
 }
 
+// Fetch RAW (non-averaged) feeds within the selected window, so min/max/current
+// stats show the EXACT measurement time and value. Averaged feeds bucket timestamps
+// to boundaries (e.g. 21:43 -> 22:00) and smooth values, which is fine for the chart
+// but wrong for stats. Paginates past ThingSpeak's 8000-row cap, bounded by the window.
+async function fetchRawFeeds(range) {
+  const startStr = tsParam(DT.now().toMillis() - RANGES[range].ms);
+  const PAGE = 8000;
+  const byTime = new Map();
+  let end = null;
+  for (let i = 0; i < 50; i++) {
+    const p = new URLSearchParams({ api_key: READ_API_KEY, results: PAGE, start: startStr, timezone: "UTC" });
+    if (end) p.set("end", end);
+    const data = await fetchJson(`https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?${p.toString()}`);
+    const feeds = data.feeds || [];
+    if (!feeds.length) break;
+    for (const f of feeds) byTime.set(f.created_at, f);
+    if (feeds.length < PAGE) break;
+    const nextEnd = DT.fromISO(feeds[0].created_at, { zone: "utc" }).minus({ seconds: 1 }).toFormat("yyyy-MM-dd HH:mm:ss");
+    if (nextEnd === end) break;
+    end = nextEnd;
+  }
+  return [...byTime.values()].sort((a, b) =>
+    a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
+}
+
 function setStatus(msg, isErr=false) {
   const el = document.getElementById("status");
   el.textContent = msg;
@@ -381,8 +406,18 @@ async function load(range) {
     chart1.update();
     chart2.update();
 
-    updateCard("s1", computeStats(s1));
-    updateCard("s2", computeStats(s2));
+    // Stats use RAW measurements for exact times/values (1h fetch is already raw).
+    const rawFeeds = RANGES[range].average ? await fetchRawFeeds(range) : feeds;
+    const r1 = [], r2 = [];
+    for (const f of rawFeeds) {
+      const t = DT.fromISO(f.created_at, { zone: "utc" }).toMillis();
+      const n1 = parseFloat(f.field1);
+      const n2 = parseFloat(f.field2);
+      r1.push({ x: t, y: Number.isFinite(n1) ? n1 : null });
+      r2.push({ x: t, y: Number.isFinite(n2) ? n2 : null });
+    }
+    updateCard("s1", computeStats(r1));
+    updateCard("s2", computeStats(r2));
 
     setStatus(`Ažurirano ${DT.now().toFormat("HH:mm:ss")}`);
   } catch (e) {

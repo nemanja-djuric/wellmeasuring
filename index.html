@@ -20,19 +20,7 @@
     --text: #e2e8f0;
     --muted: #94a3b8;
     --c1: #38bdf8; /* Stari Bunar */
-    --c2: #f472b6; /* Novi Bunar */
-    --accent: #6366f1;
-  }
-  body.light {
-    --bg: #f1f5f9;
-    --bg-2: #ffffff;
-    --panel: #ffffff;
-    --panel-2: #f1f5f9;
-    --border: #d8dee9;
-    --text: #1e293b;
-    --muted: #64748b;
-    --c1: #0284c7; /* Stari Bunar */
-    --c2: #db2777; /* Novi Bunar */
+    --c2: #34d399; /* Novi Bunar */
     --accent: #6366f1;
   }
   * { box-sizing: border-box; }
@@ -61,12 +49,6 @@
   }
   .seg button:hover { color: var(--text); }
   .seg button.active { background: var(--accent); color: #fff; }
-  .toggle {
-    border: 1px solid var(--border); background: var(--panel); color: var(--text);
-    padding: 8px 14px; border-radius: 10px; cursor: pointer; font-size: 14px;
-    font-weight: 600; display: inline-flex; align-items: center; gap: 6px;
-  }
-  .toggle:hover { border-color: var(--accent); }
   .status { margin-left: auto; color: var(--muted); font-size: 13px; }
   .status.err { color: #ef4444; }
 
@@ -111,13 +93,15 @@
   /* Osnovno (Basic) view — big current readings, fills the screen */
   #view-basic { max-width: 1100px; margin: 0 auto; display: flex;
                 flex-direction: column; gap: 16px;
-                min-height: calc(100dvh - 170px); }
+                min-height: calc(100dvh - 110px); }
   .big-card { flex: 1; background: var(--panel); border: 1px solid var(--border);
               border-radius: 18px; padding: 24px; display: flex; flex-direction: column;
               align-items: center; justify-content: center; text-align: center; gap: 12px; }
   .big-name { font-size: 20px; font-weight: 650; color: var(--muted);
               display: flex; align-items: center; gap: 10px; }
   .big-name .wico { width: 30px; height: 30px; }
+  .big-main { display: flex; align-items: center; justify-content: center; gap: clamp(14px, 5vw, 32px); }
+  .big-ico { width: clamp(72px, 26vw, 140px); height: clamp(72px, 26vw, 140px); flex: 0 0 auto; }
   .big-val { font-size: clamp(56px, 18vw, 92px); font-weight: 800; line-height: 1;
              letter-spacing: -.02em; }
   .big-unit { font-size: .42em; font-weight: 600; color: var(--muted); margin-left: 8px; }
@@ -125,11 +109,6 @@
 </style>
 </head>
 <body>
-
-<header>
-  <h1>Praćenje bunara</h1>
-  <div class="sub">ThingSpeak kanal 3030085 · Stari Bunar &amp; Novi Bunar</div>
-</header>
 
 <div class="tabs" id="tabs">
   <button data-tab="basic" class="active">Osnovno</button>
@@ -139,13 +118,19 @@
 <!-- ===== Osnovno (Basic): current readings, full screen ===== -->
 <section id="view-basic" class="view">
   <div class="big-card">
-    <div class="big-name"><span class="wico" data-well="old" style="color:var(--c1)"></span> Stari Bunar</div>
-    <div class="big-val" id="b1-val" style="color:var(--c1)">–</div>
+    <div class="big-name">Stari Bunar</div>
+    <div class="big-main">
+      <span class="wico big-ico" data-well="old" style="color:var(--c1)"></span>
+      <span class="big-val" id="b1-val" style="color:var(--c1)">–</span>
+    </div>
     <div class="big-when" id="b1-t"></div>
   </div>
   <div class="big-card">
-    <div class="big-name"><span class="wico" data-well="new" style="color:var(--c2)"></span> Novi Bunar</div>
-    <div class="big-val" id="b2-val" style="color:var(--c2)">–</div>
+    <div class="big-name">Novi Bunar</div>
+    <div class="big-main">
+      <span class="wico big-ico" data-well="new" style="color:var(--c2)"></span>
+      <span class="big-val" id="b2-val" style="color:var(--c2)">–</span>
+    </div>
     <div class="big-when" id="b2-t"></div>
   </div>
 </section>
@@ -159,7 +144,6 @@
       <button data-range="7d">7d</button>
       <button data-range="30d">30d</button>
     </div>
-    <button class="toggle" id="theme-toggle" title="Promeni temu">🌙 Tamna</button>
     <span class="status" id="status">Učitavanje…</span>
   </div>
 
@@ -318,13 +302,12 @@ function updateCard(prefix, stats) {
 }
 
 function themeColors() {
-  const light = document.body.classList.contains("light");
   return {
-    text: light ? "#1e293b" : "#e2e8f0",
-    muted: light ? "#64748b" : "#94a3b8",
-    grid: light ? "rgba(100,116,139,.15)" : "rgba(148,163,184,.1)",
-    tipBg: light ? "#ffffff" : "#0f172a",
-    tipBorder: light ? "#d8dee9" : "#334155",
+    text: "#e2e8f0",
+    muted: "#94a3b8",
+    grid: "rgba(148,163,184,.1)",
+    tipBg: "#0f172a",
+    tipBorder: "#334155",
   };
 }
 
@@ -370,25 +353,9 @@ function makeChart(canvasId, label, color, bg, yMin, yMax) {
   });
 }
 
-function applyThemeToCharts() {
-  const c = themeColors();
-  for (const ch of [chart1, chart2]) {
-    if (!ch) continue;
-    ch.options.plugins.tooltip.backgroundColor = c.tipBg;
-    ch.options.plugins.tooltip.borderColor = c.tipBorder;
-    ch.options.plugins.tooltip.titleColor = c.text;
-    ch.options.plugins.tooltip.bodyColor = c.text;
-    ch.options.scales.x.ticks.color = c.muted;
-    ch.options.scales.x.grid.color = c.grid;
-    ch.options.scales.y.ticks.color = c.muted;
-    ch.options.scales.y.grid.color = c.grid;
-    ch.update("none");
-  }
-}
-
 function makeCharts() {
   chart1 = makeChart("chart1", "Stari Bunar", "#38bdf8", "rgba(56,189,248,.12)", 0, 4);
-  chart2 = makeChart("chart2", "Novi Bunar", "#f472b6", "rgba(244,114,182,.10)", 0, 12);
+  chart2 = makeChart("chart2", "Novi Bunar", "#34d399", "rgba(52,211,153,.12)", 0, 12);
 }
 
 async function load(range) {
@@ -477,20 +444,6 @@ async function checkSignal() {
   }
 }
 
-// ---- Theme toggle (persisted) ----
-function setTheme(theme) {
-  document.body.classList.remove("light", "dark");
-  document.body.classList.add(theme);
-  document.getElementById("theme-toggle").textContent =
-    theme === "light" ? "☀️ Svetla" : "🌙 Tamna";
-  localStorage.setItem("theme", theme);
-  applyThemeToCharts();
-}
-
-document.getElementById("theme-toggle").addEventListener("click", () => {
-  setTheme(document.body.classList.contains("light") ? "dark" : "light");
-});
-
 document.getElementById("ranges").addEventListener("click", (e) => {
   const btn = e.target.closest("button");
   if (btn) selectRange(btn.dataset.range);
@@ -551,19 +504,23 @@ function refreshActive() {
 
 // ---- Well icons (rustic stone well vs. modern tap) ----
 const WELL_ICONS = {
-  old: `<svg viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12 2 2 8h20L12 2Z"/>
-    <rect x="5" y="8.4" width="1.8" height="5"/>
-    <rect x="17.2" y="8.4" width="1.8" height="5"/>
-    <path d="M6.2 13 6.9 9.2h10.2l.7 3.8H6.2Z" opacity=".5"/>
-    <path d="M4.3 13.2h15.4l1.2 7.8H3.1l1.2-7.8Z"/>
-    <rect x="3.5" y="12.3" width="17" height="1.9" rx=".95"/>
-    <path d="M12 9.2v3.1" stroke="currentColor" stroke-width="1.2"/>
-    <rect x="10.2" y="14.8" width="3.6" height="3.1" rx=".5" fill="#fff" opacity=".28"/>
+  // Stari Bunar — classic roofed wishing well
+  old: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 9.5 L12 3.5 L21 9.5"/>
+    <path d="M7 9.5 V13.5"/>
+    <path d="M17 9.5 V13.5"/>
+    <path d="M6 11 H18"/>
+    <path d="M12 11 V13"/>
+    <path d="M10.4 13 H13.6 L13.1 15.2 H10.9 Z"/>
+    <path d="M6.5 13.5 L5.5 20.5 H18.5 L17.5 13.5 Z"/>
+    <path d="M9 17.2 H15"/>
   </svg>`,
-  new: `<svg viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12 2.2c-.5.6-6.3 7.6-6.3 11.5a6.3 6.3 0 1 0 12.6 0C18.3 9.8 12.5 2.8 12 2.2Z"/>
-    <path d="M7.4 14.2h2.1l1-2.1 1.7 3.6 1-1.5h3.3" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".65"/>
+  // Novi Bunar — modern gooseneck tap with a water drop
+  new: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 20.5 H13"/>
+    <path d="M7 20.5 V8"/>
+    <path d="M7 8 a5 5 0 0 1 10 0 v1.5"/>
+    <path d="M17 9.8 c-1.1 1.5 -1.7 2.6 -1.7 3.4 a1.7 1.7 0 0 0 3.4 0 C18.7 12.4 18.1 11.3 17 9.8 Z"/>
   </svg>`
 };
 
@@ -571,7 +528,7 @@ document.querySelectorAll(".wico").forEach(el => {
   el.innerHTML = WELL_ICONS[el.dataset.well] || "";
 });
 
-setTheme(localStorage.getItem("theme") || "dark");
+document.body.classList.add("dark");
 switchTab("basic");
 refreshTimer = setInterval(refreshActive, 60000);
 </script>

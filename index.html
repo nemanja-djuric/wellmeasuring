@@ -81,6 +81,9 @@
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
   .card h2 { margin: 0 0 12px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
   .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .wico { display: inline-flex; align-items: center; justify-content: center;
+          width: 26px; height: 26px; flex: 0 0 auto; }
+  .wico svg { width: 100%; height: 100%; }
   .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .stat { background: var(--panel-2); border-radius: 10px; padding: 10px 12px; }
   .stat .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
@@ -123,7 +126,7 @@
 
 <div class="cards">
   <div class="card">
-    <h2><span class="dot" style="background:var(--c1)"></span> Stari Bunar</h2>
+    <h2><span class="wico" data-well="old" style="color:var(--c1)"></span> Stari Bunar</h2>
     <div class="stats">
       <div class="stat"><div class="label">Min</div><div class="val" id="s1-min">–</div><div class="when" id="s1-min-t"></div></div>
       <div class="stat"><div class="label">Maks</div><div class="val" id="s1-max">–</div><div class="when" id="s1-max-t"></div></div>
@@ -131,7 +134,7 @@
     </div>
   </div>
   <div class="card">
-    <h2><span class="dot" style="background:var(--c2)"></span> Novi Bunar</h2>
+    <h2><span class="wico" data-well="new" style="color:var(--c2)"></span> Novi Bunar</h2>
     <div class="stats">
       <div class="stat"><div class="label">Min</div><div class="val" id="s2-min">–</div><div class="when" id="s2-min-t"></div></div>
       <div class="stat"><div class="label">Maks</div><div class="val" id="s2-max">–</div><div class="when" id="s2-max-t"></div></div>
@@ -142,11 +145,11 @@
 
 <div class="charts">
   <div class="chart-wrap">
-    <h3><span class="dot" style="background:var(--c1)"></span> Stari Bunar<span class="gran" id="gran1"></span></h3>
+    <h3><span class="wico" data-well="old" style="color:var(--c1)"></span> Stari Bunar<span class="gran" id="gran1"></span></h3>
     <div class="chart-box"><canvas id="chart1"></canvas></div>
   </div>
   <div class="chart-wrap">
-    <h3><span class="dot" style="background:var(--c2)"></span> Novi Bunar<span class="gran" id="gran2"></span></h3>
+    <h3><span class="wico" data-well="new" style="color:var(--c2)"></span> Novi Bunar<span class="gran" id="gran2"></span></h3>
     <div class="chart-box"><canvas id="chart2"></canvas></div>
   </div>
 </div>
@@ -160,10 +163,10 @@ const READ_API_KEY = "GCO9R4MUA2YCOHCY";
 
 // range -> ThingSpeak query params (averaging keeps point counts sane)
 const RANGES = {
-  "1h":  { minutes: 60,  average: null, gran: "1 min",  ms: 60*60*1000          },
-  "1d":  { days: 1,      average: 60,   gran: "1 sat",   ms: 24*60*60*1000       },
-  "7d":  { days: 7,      average: 240,  gran: "4 sata",  ms: 7*24*60*60*1000     },
-  "30d": { days: 30,     average: 1440, gran: "1 dan",   ms: 30*24*60*60*1000    },
+  "1h":  { minutes: 60,  average: null, gran: "1 min",  ms: 60*60*1000,        unit: "minute" },
+  "1d":  { days: 1,      average: 60,   gran: "1 sat",   ms: 24*60*60*1000,     unit: "hour"   },
+  "7d":  { days: 7,      average: 240,  gran: "4 sata",  ms: 7*24*60*60*1000,   unit: "day"    },
+  "30d": { days: 30,     average: 1440, gran: "1 dan",   ms: 30*24*60*60*1000,  unit: "day"    },
 };
 
 const DT = luxon.DateTime;
@@ -311,10 +314,10 @@ async function load(range) {
     const s1 = [], s2 = [];
     for (const f of feeds) {
       const t = DT.fromISO(f.created_at, { zone: "utc" }).toMillis();
-      const v1 = f.field1 == null || f.field1 === "" ? null : parseFloat(f.field1);
-      const v2 = f.field2 == null || f.field2 === "" ? null : parseFloat(f.field2);
-      s1.push({ x: t, y: v1 });
-      s2.push({ x: t, y: v2 });
+      const n1 = parseFloat(f.field1);
+      const n2 = parseFloat(f.field2);
+      s1.push({ x: t, y: Number.isFinite(n1) ? n1 : null });
+      s2.push({ x: t, y: Number.isFinite(n2) ? n2 : null });
     }
 
     chart1.data.datasets[0].data = s1;
@@ -324,6 +327,7 @@ async function load(range) {
     const xMax = DT.now().toMillis();
     const xMin = xMax - RANGES[range].ms;
     for (const ch of [chart1, chart2]) {
+      ch.options.scales.x.time.unit = RANGES[range].unit;
       ch.options.scales.x.min = xMin;
       ch.options.scales.x.max = xMax;
     }
@@ -408,6 +412,28 @@ document.getElementById("theme-toggle").addEventListener("click", () => {
 document.getElementById("ranges").addEventListener("click", (e) => {
   const btn = e.target.closest("button");
   if (btn) selectRange(btn.dataset.range);
+});
+
+// ---- Well icons (rustic stone well vs. modern tap) ----
+const WELL_ICONS = {
+  old: `<svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2 2 8h20L12 2Z"/>
+    <rect x="5" y="8.4" width="1.8" height="5"/>
+    <rect x="17.2" y="8.4" width="1.8" height="5"/>
+    <path d="M6.2 13 6.9 9.2h10.2l.7 3.8H6.2Z" opacity=".5"/>
+    <path d="M4.3 13.2h15.4l1.2 7.8H3.1l1.2-7.8Z"/>
+    <rect x="3.5" y="12.3" width="17" height="1.9" rx=".95"/>
+    <path d="M12 9.2v3.1" stroke="currentColor" stroke-width="1.2"/>
+    <rect x="10.2" y="14.8" width="3.6" height="3.1" rx=".5" fill="#fff" opacity=".28"/>
+  </svg>`,
+  new: `<svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2.2c-.5.6-6.3 7.6-6.3 11.5a6.3 6.3 0 1 0 12.6 0C18.3 9.8 12.5 2.8 12 2.2Z"/>
+    <path d="M7.4 14.2h2.1l1-2.1 1.7 3.6 1-1.5h3.3" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".65"/>
+  </svg>`
+};
+
+document.querySelectorAll(".wico").forEach(el => {
+  el.innerHTML = WELL_ICONS[el.dataset.well] || "";
 });
 
 setTheme(localStorage.getItem("theme") || "dark");

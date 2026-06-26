@@ -94,12 +94,34 @@
   .chart-wrap { background: var(--panel);
                 border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px 8px; }
   .chart-wrap h3 { margin: 0 0 6px; font-size: 14px; display: flex; align-items: center; gap: 8px; color: var(--text); }
-  .chart-wrap h3 .gran { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted);
-                         background: var(--panel-2); border: 1px solid var(--border);
-                         padding: 3px 9px; border-radius: 999px; }
   .chart-box { position: relative; height: 300px; }
   footer { max-width: 1100px; margin: 16px auto 0; color: var(--muted); font-size: 12px; text-align: center; }
   @media (max-width: 680px) { .cards { grid-template-columns: 1fr; } }
+
+  /* Tabs (Osnovno / Napredno) */
+  .tabs { max-width: 1100px; margin: 0 auto 18px; display: flex;
+          background: var(--panel); border-radius: 12px; padding: 5px; gap: 5px; }
+  .tabs button { flex: 1; border: 0; background: transparent; color: var(--muted);
+                 padding: 12px 16px; border-radius: 9px; cursor: pointer;
+                 font-size: 16px; font-weight: 650; transition: .15s; }
+  .tabs button:hover { color: var(--text); }
+  .tabs button.active { background: var(--accent); color: #fff; }
+  .hidden { display: none !important; }
+
+  /* Osnovno (Basic) view — big current readings, fills the screen */
+  #view-basic { max-width: 1100px; margin: 0 auto; display: flex;
+                flex-direction: column; gap: 16px;
+                min-height: calc(100dvh - 170px); }
+  .big-card { flex: 1; background: var(--panel); border: 1px solid var(--border);
+              border-radius: 18px; padding: 24px; display: flex; flex-direction: column;
+              align-items: center; justify-content: center; text-align: center; gap: 12px; }
+  .big-name { font-size: 20px; font-weight: 650; color: var(--muted);
+              display: flex; align-items: center; gap: 10px; }
+  .big-name .wico { width: 30px; height: 30px; }
+  .big-val { font-size: clamp(56px, 18vw, 92px); font-weight: 800; line-height: 1;
+             letter-spacing: -.02em; }
+  .big-unit { font-size: .42em; font-weight: 600; color: var(--muted); margin-left: 8px; }
+  .big-when { font-size: 14px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -109,48 +131,70 @@
   <div class="sub">ThingSpeak kanal 3030085 · Stari Bunar &amp; Novi Bunar</div>
 </header>
 
-<div class="controls">
-  <div class="seg" id="ranges">
-    <button data-range="1h">1č</button>
-    <button data-range="1d" class="active">1d</button>
-    <button data-range="7d">7d</button>
-    <button data-range="30d">30d</button>
+<div class="tabs" id="tabs">
+  <button data-tab="basic" class="active">Osnovno</button>
+  <button data-tab="advanced">Napredno</button>
+</div>
+
+<!-- ===== Osnovno (Basic): current readings, full screen ===== -->
+<section id="view-basic" class="view">
+  <div class="big-card">
+    <div class="big-name"><span class="wico" data-well="old" style="color:var(--c1)"></span> Stari Bunar</div>
+    <div class="big-val" id="b1-val" style="color:var(--c1)">–</div>
+    <div class="big-when" id="b1-t"></div>
   </div>
-  <button class="toggle" id="theme-toggle" title="Promeni temu">🌙 Tamna</button>
-  <span class="status" id="status">Učitavanje…</span>
-</div>
+  <div class="big-card">
+    <div class="big-name"><span class="wico" data-well="new" style="color:var(--c2)"></span> Novi Bunar</div>
+    <div class="big-val" id="b2-val" style="color:var(--c2)">–</div>
+    <div class="big-when" id="b2-t"></div>
+  </div>
+</section>
 
-<div class="banner" id="signal-banner" hidden>
-  <span class="ico">⚠️</span><span id="signal-text"></span>
-</div>
+<!-- ===== Napredno (Advanced): full dashboard ===== -->
+<section id="view-advanced" class="view hidden">
+  <div class="controls">
+    <div class="seg" id="ranges">
+      <button data-range="1h">1č</button>
+      <button data-range="1d" class="active">1d</button>
+      <button data-range="7d">7d</button>
+      <button data-range="30d">30d</button>
+    </div>
+    <button class="toggle" id="theme-toggle" title="Promeni temu">🌙 Tamna</button>
+    <span class="status" id="status">Učitavanje…</span>
+  </div>
 
-<div class="charts">
-  <div class="card">
-    <h2><span class="wico" data-well="old" style="color:var(--c1)"></span> Stari Bunar</h2>
-    <div class="stats">
-      <div class="stat"><div class="label">Min</div><div class="val" id="s1-min">–</div><div class="when" id="s1-min-t"></div></div>
-      <div class="stat"><div class="label">Maks</div><div class="val" id="s1-max">–</div><div class="when" id="s1-max-t"></div></div>
-      <div class="stat"><div class="label">Poslednje</div><div class="val" id="s1-last">–</div><div class="when" id="s1-last-t"></div></div>
+  <div class="banner" id="signal-banner" hidden>
+    <span class="ico">⚠️</span><span id="signal-text"></span>
+  </div>
+
+  <div class="charts">
+    <div class="card">
+      <h2><span class="wico" data-well="old" style="color:var(--c1)"></span> Stari Bunar</h2>
+      <div class="stats">
+        <div class="stat"><div class="label">Min</div><div class="val" id="s1-min">–</div><div class="when" id="s1-min-t"></div></div>
+        <div class="stat"><div class="label">Maks</div><div class="val" id="s1-max">–</div><div class="when" id="s1-max-t"></div></div>
+        <div class="stat"><div class="label">Poslednje</div><div class="val" id="s1-last">–</div><div class="when" id="s1-last-t"></div></div>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <h3><span class="wico" data-well="old" style="color:var(--c1)"></span> Stari Bunar</h3>
+      <div class="chart-box"><canvas id="chart1"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="wico" data-well="new" style="color:var(--c2)"></span> Novi Bunar</h2>
+      <div class="stats">
+        <div class="stat"><div class="label">Min</div><div class="val" id="s2-min">–</div><div class="when" id="s2-min-t"></div></div>
+        <div class="stat"><div class="label">Maks</div><div class="val" id="s2-max">–</div><div class="when" id="s2-max-t"></div></div>
+        <div class="stat"><div class="label">Poslednje</div><div class="val" id="s2-last">–</div><div class="when" id="s2-last-t"></div></div>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <h3><span class="wico" data-well="new" style="color:var(--c2)"></span> Novi Bunar</h3>
+      <div class="chart-box"><canvas id="chart2"></canvas></div>
     </div>
   </div>
-  <div class="chart-wrap">
-    <h3><span class="wico" data-well="old" style="color:var(--c1)"></span> Stari Bunar<span class="gran" id="gran1"></span></h3>
-    <div class="chart-box"><canvas id="chart1"></canvas></div>
-  </div>
-
-  <div class="card">
-    <h2><span class="wico" data-well="new" style="color:var(--c2)"></span> Novi Bunar</h2>
-    <div class="stats">
-      <div class="stat"><div class="label">Min</div><div class="val" id="s2-min">–</div><div class="when" id="s2-min-t"></div></div>
-      <div class="stat"><div class="label">Maks</div><div class="val" id="s2-max">–</div><div class="when" id="s2-max-t"></div></div>
-      <div class="stat"><div class="label">Poslednje</div><div class="val" id="s2-last">–</div><div class="when" id="s2-last-t"></div></div>
-    </div>
-  </div>
-  <div class="chart-wrap">
-    <h3><span class="wico" data-well="new" style="color:var(--c2)"></span> Novi Bunar<span class="gran" id="gran2"></span></h3>
-    <div class="chart-box"><canvas id="chart2"></canvas></div>
-  </div>
-</div>
+</section>
 
 <footer>Automatsko osvežavanje na 60s · vreme prikazano u vašoj lokalnoj vremenskoj zoni</footer>
 
@@ -390,9 +434,6 @@ function selectRange(range) {
   currentRange = range;
   document.querySelectorAll("#ranges button").forEach(b =>
     b.classList.toggle("active", b.dataset.range === range));
-  const granText = RANGES[range].gran;
-  document.getElementById("gran1").textContent = granText;
-  document.getElementById("gran2").textContent = granText;
   load(range);
 }
 
@@ -455,6 +496,59 @@ document.getElementById("ranges").addEventListener("click", (e) => {
   if (btn) selectRange(btn.dataset.range);
 });
 
+// ---- Tabs (Osnovno / Napredno) ----
+let currentTab = "basic";
+let advancedInited = false;
+
+async function loadBasic() {
+  try {
+    const url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds/last.json?api_key=${READ_API_KEY}&timezone=UTC`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const txt = (await res.text()).trim();
+    const last = (txt && txt !== "-1") ? JSON.parse(txt) : null;
+    const setVal = (id, raw) => {
+      const v = parseFloat(raw);
+      document.getElementById(id).innerHTML =
+        `${fmt(Number.isFinite(v) ? v : null)}<span class="big-unit">${UNIT}</span>`;
+    };
+    setVal("b1-val", last && last.field1);
+    setVal("b2-val", last && last.field2);
+    const when = last && last.created_at
+      ? whenStr({ x: DT.fromISO(last.created_at, { zone: "utc" }).toMillis() })
+      : "";
+    document.getElementById("b1-t").textContent = when;
+    document.getElementById("b2-t").textContent = when;
+  } catch (e) {
+    document.getElementById("b1-t").textContent = `Greška: ${e.message}`;
+    document.getElementById("b2-t").textContent = "";
+  }
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll("#tabs button").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === tab));
+  document.getElementById("view-basic").classList.toggle("hidden", tab !== "basic");
+  document.getElementById("view-advanced").classList.toggle("hidden", tab !== "advanced");
+  if (tab === "advanced") {
+    if (!advancedInited) { advancedInited = true; makeCharts(); selectRange(currentRange); }
+    else { load(currentRange); }
+  } else {
+    loadBasic();
+  }
+}
+
+document.getElementById("tabs").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (btn) switchTab(btn.dataset.tab);
+});
+
+function refreshActive() {
+  if (currentTab === "basic") loadBasic();
+  else if (advancedInited) load(currentRange);
+}
+
 // ---- Well icons (rustic stone well vs. modern tap) ----
 const WELL_ICONS = {
   old: `<svg viewBox="0 0 24 24" fill="currentColor">
@@ -478,9 +572,8 @@ document.querySelectorAll(".wico").forEach(el => {
 });
 
 setTheme(localStorage.getItem("theme") || "dark");
-makeCharts();
-selectRange("1d");
-refreshTimer = setInterval(() => load(currentRange), 60000);
+switchTab("basic");
+refreshTimer = setInterval(refreshActive, 60000);
 </script>
 </body>
 </html>

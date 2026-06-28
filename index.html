@@ -91,6 +91,14 @@
   .tabs button.active { background: var(--accent); color: #fff; }
   .hidden { display: none !important; }
 
+  /* Smooth tab transitions */
+  .view { transition: opacity .26s ease, transform .26s ease; will-change: opacity, transform; }
+  .view.view-enter { opacity: 0; transform: translateX(var(--enter-x, 24px)); }
+  @media (prefers-reduced-motion: reduce) {
+    .view { transition: none; }
+    .view.view-enter { opacity: 1; transform: none; }
+  }
+
   /* Pregled (Basic) view — big current readings, fills the screen */
   #view-basic { max-width: 1100px; margin: 0 auto; display: flex;
                 flex-direction: column; gap: 16px;
@@ -564,12 +572,25 @@ async function loadBasic() {
   }
 }
 
-function switchTab(tab) {
+function switchTab(tab, dir = 0) {
+  if (tab === currentTab) return;
   currentTab = tab;
   document.querySelectorAll("#tabs button").forEach(b =>
     b.classList.toggle("active", b.dataset.tab === tab));
-  document.getElementById("view-basic").classList.toggle("hidden", tab !== "basic");
-  document.getElementById("view-advanced").classList.toggle("hidden", tab !== "advanced");
+
+  const incoming = document.getElementById(tab === "basic" ? "view-basic" : "view-advanced");
+  const outgoing = document.getElementById(tab === "basic" ? "view-advanced" : "view-basic");
+
+  // Slide-in direction: forward (next tab) enters from right, back from left.
+  const enterX = dir < 0 ? "-24px" : "24px";
+  outgoing.classList.add("hidden");
+  incoming.classList.remove("hidden");
+  incoming.style.setProperty("--enter-x", enterX);
+  incoming.classList.add("view-enter");
+  // Force reflow so the start state is applied before transitioning in.
+  void incoming.offsetWidth;
+  requestAnimationFrame(() => incoming.classList.remove("view-enter"));
+
   if (tab === "advanced") {
     if (!advancedInited) { advancedInited = true; makeCharts(); selectRange(currentRange); }
     else { load(currentRange); }
@@ -580,7 +601,9 @@ function switchTab(tab) {
 
 document.getElementById("tabs").addEventListener("click", (e) => {
   const btn = e.target.closest("button");
-  if (btn) switchTab(btn.dataset.tab);
+  if (!btn) return;
+  const dir = TAB_ORDER.indexOf(btn.dataset.tab) - TAB_ORDER.indexOf(currentTab);
+  switchTab(btn.dataset.tab, dir);
 });
 
 // ---- Swipe navigation between tabs (touch) ----
@@ -605,8 +628,9 @@ const TAB_ORDER = ["basic", "advanced"];
     const dy = t.clientY - startY;
     if (Math.abs(dx) < SWIPE_MIN || Math.abs(dy) > SWIPE_MAX_OFF) return;
     const idx = TAB_ORDER.indexOf(currentTab);
-    const next = dx < 0 ? idx + 1 : idx - 1; // swipe left -> next tab
-    if (next >= 0 && next < TAB_ORDER.length) switchTab(TAB_ORDER[next]);
+    const step = dx < 0 ? 1 : -1; // swipe left -> next tab
+    const next = idx + step;
+    if (next >= 0 && next < TAB_ORDER.length) switchTab(TAB_ORDER[next], step);
   }, { passive: true });
 })();
 
@@ -645,7 +669,7 @@ document.querySelectorAll(".wico").forEach(el => {
 });
 
 document.body.classList.add("dark");
-switchTab("basic");
+loadBasic();
 checkSignal();
 refreshTimer = setInterval(refreshActive, 60000);
 </script>

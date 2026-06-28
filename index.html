@@ -81,7 +81,7 @@
   .chart-box { position: relative; height: 230px; }
   .card .chart-box { margin-top: 14px; }
 
-  /* Tabs (Osnovno / Napredno) */
+  /* Tabs (Pregled / Detaljno) */
   .tabs { max-width: 1100px; margin: 0 auto 18px; display: flex;
           background: var(--panel); border-radius: 12px; padding: 5px; gap: 5px; }
   .tabs button { flex: 1; border: 0; background: transparent; color: var(--muted);
@@ -91,7 +91,7 @@
   .tabs button.active { background: var(--accent); color: #fff; }
   .hidden { display: none !important; }
 
-  /* Osnovno (Basic) view — big current readings, fills the screen */
+  /* Pregled (Basic) view — big current readings, fills the screen */
   #view-basic { max-width: 1100px; margin: 0 auto; display: flex;
                 flex-direction: column; gap: 16px;
                 min-height: calc(100dvh - 140px); }
@@ -116,11 +116,11 @@
 </div>
 
 <div class="tabs" id="tabs">
-  <button data-tab="basic" class="active">Osnovno</button>
-  <button data-tab="advanced">Napredno</button>
+  <button data-tab="basic" class="active">Pregled</button>
+  <button data-tab="advanced">Detaljno</button>
 </div>
 
-<!-- ===== Osnovno (Basic): current readings, full screen ===== -->
+<!-- ===== Pregled (Basic): current readings, full screen ===== -->
 <section id="view-basic" class="view">
   <div class="big-card">
     <div class="big-name">Stari Bunar</div>
@@ -140,7 +140,7 @@
   </div>
 </section>
 
-<!-- ===== Napredno (Advanced): full dashboard ===== -->
+<!-- ===== Detaljno (Advanced): full dashboard ===== -->
 <section id="view-advanced" class="view hidden">
   <div class="controls">
     <div class="seg" id="ranges">
@@ -535,7 +535,7 @@ async function exportCsv() {
 
 document.getElementById("export-csv").addEventListener("click", exportCsv);
 
-// ---- Tabs (Osnovno / Napredno) ----
+// ---- Tabs (Pregled / Detaljno) ----
 let currentTab = "basic";
 let advancedInited = false;
 

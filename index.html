@@ -584,8 +584,8 @@ document.getElementById("tabs").addEventListener("click", (e) => {
 });
 
 function refreshActive() {
-  if (currentTab === "basic") loadBasic();
-  else if (advancedInited) load(currentRange);
+  loadBasic();
+  if (advancedInited) load(currentRange);
   checkSignal();
 }
 

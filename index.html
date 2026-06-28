@@ -583,6 +583,33 @@ document.getElementById("tabs").addEventListener("click", (e) => {
   if (btn) switchTab(btn.dataset.tab);
 });
 
+// ---- Swipe navigation between tabs (touch) ----
+const TAB_ORDER = ["basic", "advanced"];
+(function enableSwipeNav() {
+  let startX = 0, startY = 0, tracking = false;
+  const SWIPE_MIN = 60;      // min horizontal distance (px)
+  const SWIPE_MAX_OFF = 50;  // max vertical drift (px)
+
+  window.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1) { tracking = false; return; }
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    tracking = true;
+  }, { passive: true });
+
+  window.addEventListener("touchend", (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    if (Math.abs(dx) < SWIPE_MIN || Math.abs(dy) > SWIPE_MAX_OFF) return;
+    const idx = TAB_ORDER.indexOf(currentTab);
+    const next = dx < 0 ? idx + 1 : idx - 1; // swipe left -> next tab
+    if (next >= 0 && next < TAB_ORDER.length) switchTab(TAB_ORDER[next]);
+  }, { passive: true });
+})();
+
 function refreshActive() {
   loadBasic();
   if (advancedInited) load(currentRange);
